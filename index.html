@@ -1450,61 +1450,47 @@ function generatePDF(){
     const safeNum = devisNumber.replace(/[^a-zA-Z0-9]+/g,'_');
     const filename = `Devis_${safeNum}_${safeName}.pdf`;
 
-    let base64;
-    try{
-      base64 = btoa(pdfString);
-    }catch(e){
-      let safeStr = '';
-      for(let i=0;i<pdfString.length;i++){
-        safeStr += String.fromCharCode(pdfString.charCodeAt(i) & 0xFF);
-      }
-      base64 = btoa(safeStr);
+    // Convert PDF string to binary bytes
+    const bytes = new Uint8Array(pdfString.length);
+    for(let i=0; i<pdfString.length; i++){
+      bytes[i] = pdfString.charCodeAt(i) & 0xFF;
     }
-    const dataUri = 'data:application/pdf;base64,' + base64;
 
-    let url = dataUri;
-    let frameLoaded = false;
-    if(typeof Blob !== 'undefined' && typeof URL !== 'undefined' && URL.createObjectURL){
+    // Primary: Blob URL (works on iOS Safari 14+, Chrome, Edge, Firefox)
+    // iOS Safari will open its native PDF viewer with a built-in Share button.
+    // Desktop browsers with `download` attribute will trigger a save dialog.
+    let blobUrl = null;
+    try{
+      const blob = new Blob([bytes], {type:'application/pdf'});
+      blobUrl = URL.createObjectURL(blob);
+    }catch(e){ blobUrl = null; }
+
+    // Fallback: base64 data URI
+    let dataUri = null;
+    if(!blobUrl){
       try{
-        const bytes = new Uint8Array(pdfString.length);
-        for(let i=0; i<pdfString.length; i++){
-          bytes[i] = pdfString.charCodeAt(i) & 0xFF;
-        }
-        const blob = new Blob([bytes], {type:'application/pdf'});
-        url = URL.createObjectURL(blob);
+        dataUri = 'data:application/pdf;base64,' + btoa(pdfString);
       }catch(e){
-        url = dataUri;
+        let safe = '';
+        for(let i=0;i<pdfString.length;i++) safe += String.fromCharCode(pdfString.charCodeAt(i)&0xFF);
+        dataUri = 'data:application/pdf;base64,' + btoa(safe);
       }
     }
 
+    const finalUrl = blobUrl || dataUri;
+
+    // iframe preview (harmless if it doesn't work in a given browser)
     const frame = document.getElementById('pdfFrame');
+    let frameLoaded = false;
+    try{ frame.src = finalUrl; frameLoaded = true; }catch(e){}
+
     const dl = document.getElementById('pdfDownloadLink');
-
-    try{
-      frame.src = url;
-      frameLoaded = true;
-    }catch(e){ frameLoaded = false; }
-
-    // iOS Safari ignores the `download` attribute on data: URIs, so a plain
-    // download link silently does nothing there. The reliable cross-platform
-    // approach is to open the PDF directly (new tab if possible, same tab as
-    // fallback): desktop browsers show their normal save/print UI, and iOS
-    // Safari opens its native PDF viewer which has its own Share/Save button.
-    dl.href = dataUri;
+    dl.href = finalUrl;
     dl.download = filename;
-    dl.removeAttribute('target');
-    dl.onclick = function(e){
-      e.preventDefault();
-      try{
-        const win = window.open(dataUri, '_blank');
-        if(!win){
-          // popup blocked: fall back to same-tab navigation
-          window.location.href = dataUri;
-        }
-      }catch(err){
-        window.location.href = dataUri;
-      }
-    };
+    // Remove any onclick override — let the native <a> click handle it.
+    // On iOS Safari: tapping an <a href="blob:..."> opens the PDF viewer natively.
+    // On desktop: the `download` attribute triggers save-as dialog.
+    dl.onclick = null;
 
     document.getElementById('pdfModal').classList.add('open');
 
