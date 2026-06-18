@@ -547,8 +547,7 @@
   </div>
   <iframe id="pdfFrame"></iframe>
   <div class="pdf-modal-actions">
-    <a id="pdfDownloadLink" class="primary" download="devis.pdf">Télécharger / Partager</a>
-    <button id="pdfOpenNewTab" class="secondary" type="button">Ouvrir dans un onglet</button>
+    <a id="pdfDownloadLink" class="primary" download="devis.pdf">Ouvrir / Enregistrer le PDF</a>
   </div>
 </div>
 
@@ -1486,25 +1485,26 @@ function generatePDF(){
       frameLoaded = true;
     }catch(e){ frameLoaded = false; }
 
+    // iOS Safari ignores the `download` attribute on data: URIs, so a plain
+    // download link silently does nothing there. The reliable cross-platform
+    // approach is to open the PDF directly (new tab if possible, same tab as
+    // fallback): desktop browsers show their normal save/print UI, and iOS
+    // Safari opens its native PDF viewer which has its own Share/Save button.
     dl.href = dataUri;
     dl.download = filename;
-    dl.setAttribute('target', '_blank');
-
-    const openBtn = document.getElementById('pdfOpenNewTab');
-    if(openBtn){
-      openBtn.onclick = function(){
-        try{
-          const win = window.open();
-          if(win){
-            win.document.write('<iframe src="' + dataUri + '" style="position:fixed;inset:0;width:100%;height:100%;border:none;"></iframe>');
-          } else {
-            window.location.href = dataUri;
-          }
-        }catch(e){
+    dl.removeAttribute('target');
+    dl.onclick = function(e){
+      e.preventDefault();
+      try{
+        const win = window.open(dataUri, '_blank');
+        if(!win){
+          // popup blocked: fall back to same-tab navigation
           window.location.href = dataUri;
         }
-      };
-    }
+      }catch(err){
+        window.location.href = dataUri;
+      }
+    };
 
     document.getElementById('pdfModal').classList.add('open');
 
@@ -1514,9 +1514,9 @@ function generatePDF(){
     maybeSetDevisNumber();
 
     if(frameLoaded){
-      status.textContent = 'PDF genere. Utilise "Telecharger / Partager" pour l\'enregistrer ou l\'envoyer.';
+      status.textContent = 'PDF genere. Utilise "Ouvrir / Enregistrer le PDF" pour le sauvegarder ou l\'envoyer.';
     } else {
-      status.textContent = 'PDF genere (apercu indisponible). Utilise "Telecharger / Partager".';
+      status.textContent = 'PDF genere (apercu indisponible). Utilise "Ouvrir / Enregistrer le PDF".';
     }
     status.className = 'pdf-status ok';
   }catch(err){
