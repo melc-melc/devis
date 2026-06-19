@@ -817,6 +817,23 @@ class SimplePDF {
     this.line(x1,y1,x2,y2);
   }
 
+  // Dark header with organic S-wave bottom edge (no gradient, purely dark)
+  darkHeaderWithWave(W, hMm){
+    const Wpt = this.mm(W);
+    const topY = this.yFromTop(0);
+    const baseY = this.yFromTop(hMm);
+    const amp = this.mm(7);
+    this.setFillColor(12,12,15);
+    const o = this.currentOps;
+    o.push('q');
+    o.push(`0 ${topY.toFixed(2)} m`);
+    o.push(`${Wpt.toFixed(2)} ${topY.toFixed(2)} l`);
+    o.push(`${Wpt.toFixed(2)} ${baseY.toFixed(2)} l`);
+    o.push(`${(Wpt*0.70).toFixed(2)} ${(baseY+amp).toFixed(2)} ${(Wpt*0.45).toFixed(2)} ${(baseY-amp).toFixed(2)} ${(Wpt*0.25).toFixed(2)} ${(baseY+amp*0.3).toFixed(2)} c`);
+    o.push(`${(Wpt*0.10).toFixed(2)} ${(baseY-amp*0.5).toFixed(2)} 0 ${(baseY+amp*0.2).toFixed(2)} 0 ${baseY.toFixed(2)} c`);
+    o.push('h f Q');
+  }
+
   build(){
     const objects = [];
     const pageCount = this.pages.length;
@@ -1168,10 +1185,10 @@ function generatePDF(){
     const bgWhite = [255,255,255];
     const surfaceLight = [243,245,248];
     const surfaceAlt = [248,249,251];
+    const dark = [12,12,15];
     const blue = [0,102,255];
     const blueDeep = [0,64,196];
-    const green = [10,138,74];
-    const greenBg = [228,247,236];
+    const blueLight = [51,133,255];
     const textMain = [13,13,18];
     const textDim = [91,93,104];
     const textFaint = [150,152,163];
@@ -1187,61 +1204,75 @@ function generatePDF(){
 
     pageBg();
 
-    // ---- Immersive gradient header ----
-    const headerH = 58;
-    doc.gradientRect(0, 0, W, headerH, blue, green, 'horizontal');
+    // ---- Dark header with organic S-wave bottom edge ----
+    const headerH = 62;
+    doc.darkHeaderWithWave(W, headerH);
 
-    // Decorative translucent circles for depth (subtle, Stripe/Notion-style)
+    // Decorative translucent blue blobs (right side, depth effect)
+    doc.setAlpha(0.12);
+    doc.setFillColor(...blue);
+    doc.circle(W-28, 18, 32, true);
+    doc.restoreAlpha();
     doc.setAlpha(0.07);
-    doc.setFillColor(255,255,255);
-    doc.circle(W-30, -8, 38, true);
-    doc.restoreAlpha();
-    doc.setAlpha(0.045);
-    doc.setFillColor(255,255,255);
-    doc.circle(W-55, 20, 30, true);
+    doc.setFillColor(...blue);
+    doc.circle(W-52, 5, 20, true);
     doc.restoreAlpha();
 
-    doc.setTextColor(...bgWhite);
-    doc.text(s.brand || 'melc.', M, 24, {fontSize:26, bold:true});
-    doc.text('DEVIS', W-M, 24, {fontSize:11, bold:true, align:'right'});
-
+    // melc. logo icon — blue rounded square (app icon style)
+    doc.setFillColor(...blue);
+    doc.roundedRect(M, 8, 20, 20, 5.5, true);
     doc.setTextColor(255,255,255);
-    let yHeaderSender = 33;
-    const headerSenderLines = [];
-    if(s.ownerName) headerSenderLines.push(s.ownerName);
-    if(s.address) s.address.split('\n').forEach(l => { if(l.trim()) headerSenderLines.push(l); });
-    if(s.phone) headerSenderLines.push('Tel : ' + s.phone);
-    if(s.email) headerSenderLines.push(s.email);
-    headerSenderLines.slice(0,3).forEach(line => { doc.text(line, M, yHeaderSender, {fontSize:8.5}); yHeaderSender += 4.6; });
+    doc.text('m', M+6.5, 23.5, {fontSize:16, bold:true});
+
+    // melc. wordmark
+    doc.setTextColor(255,255,255);
+    doc.text(s.brand || 'melc.', M+24, 24, {fontSize:22, bold:true});
+
+    // Sender info in header (subtle, dimmed)
+    let yHs = 34;
+    const hLines = [];
+    if(s.ownerName) hLines.push(s.ownerName);
+    if(s.address) s.address.split('\n').forEach(l => { if(l.trim()) hLines.push(l); });
+    if(s.phone) hLines.push('Tel : ' + s.phone);
+    if(s.email) hLines.push(s.email);
+    doc.setTextColor(140,142,150);
+    hLines.slice(0,3).forEach(line => { doc.text(line, M, yHs, {fontSize:8.5}); yHs += 4.8; });
     if(s.siret){
-      doc.text('SIRET ' + s.siret, M, headerH-6, {fontSize:8});
+      doc.setTextColor(100,102,110);
+      doc.text('SIRET ' + s.siret, M, headerH-8, {fontSize:8});
     }
 
-    // Floating white rounded card for devis meta (number / date / validity)
+    // "DEVIS" pill badge — top right, blue
+    doc.setFillColor(...blue);
+    doc.roundedRect(W-M-30, 7, 30, 10, 5, true);
+    doc.setTextColor(255,255,255);
+    doc.text('DEVIS', W-M-15, 14.2, {fontSize:8, bold:true, align:'center'});
+
+    // ---- Floating devis meta card (white, shadow) ----
     const devisNumber = document.getElementById('devisNumber').value || '-';
     const devisDateRaw = document.getElementById('devisDate').value;
     const devisDate = devisDateRaw ? new Date(devisDateRaw + 'T00:00:00').toLocaleDateString('fr-FR') : new Date().toLocaleDateString('fr-FR');
     const validity = document.getElementById('devisValidity').value || '30';
 
-    const cardW = 70, cardH = 38, cardX = W-M-cardW, cardY = headerH - cardH/2 - 6;
+    const cardW = 68, cardH = 36, cardX = W-M-cardW, cardY = headerH - cardH/2 - 2;
     doc.softShadow(cardX, cardY, cardW, cardH, 4);
     doc.setFillColor(...bgWhite);
     doc.roundedRect(cardX, cardY, cardW, cardH, 4, true);
     doc.setTextColor(...textFaint);
-    doc.text('N DE DEVIS', cardX+6, cardY+8, {fontSize:7, bold:true});
-    doc.setTextColor(...blueDeep);
-    doc.text(devisNumber, cardX+6, cardY+15, {fontSize:11, bold:true});
+    doc.text('N DE DEVIS', cardX+5, cardY+8, {fontSize:7, bold:true});
+    doc.setTextColor(...blue);
+    doc.text(devisNumber, cardX+5, cardY+15, {fontSize:11, bold:true});
     doc.setDrawColor(...surfaceLight);
     doc.setLineWidth(0.3);
-    doc.line(cardX+6, cardY+19, cardX+cardW-6, cardY+19);
+    doc.line(cardX+5, cardY+18.5, cardX+cardW-5, cardY+18.5);
     doc.setTextColor(...textFaint);
-    doc.text('DATE', cardX+6, cardY+25, {fontSize:7, bold:true});
-    doc.text('VALABLE', cardX+38, cardY+25, {fontSize:7, bold:true});
+    doc.text('DATE', cardX+5, cardY+24, {fontSize:7, bold:true});
+    doc.text('VALABLE', cardX+36, cardY+24, {fontSize:7, bold:true});
     doc.setTextColor(...textMain);
-    doc.text(devisDate, cardX+6, cardY+31, {fontSize:8.5, bold:true});
-    doc.text(`${validity} j`, cardX+38, cardY+31, {fontSize:8.5, bold:true});
+    doc.text(devisDate, cardX+5, cardY+30, {fontSize:8.5, bold:true});
+    doc.text(`${validity} j`, cardX+36, cardY+30, {fontSize:8.5, bold:true});
 
-    y = headerH + 14;
+    y = headerH + 12;
 
     // ---- Two-column: Emis par / Adresse a ----
     const colW = (W - 2*M - 8) / 2;
@@ -1286,7 +1317,7 @@ function generatePDF(){
     y = Math.max(y1, y2) + 10;
 
     // ---- Articles table ----
-    const colDesc = M+9, colQty = 138, colPrice = 163, colTotalX = W-M-2;
+    const colDesc = M+13, colQty = 138, colPrice = 163, colTotalX = W-M-2;
     doc.setFillColor(...textMain);
     doc.roundedRect(M, y, W-2*M, 9, 2.5, true);
     doc.setTextColor(...bgWhite);
@@ -1306,7 +1337,7 @@ function generatePDF(){
 
       const name = it.name || `Article ${idx+1}`;
       const desc = it.desc || '';
-      const descLines = desc ? doc.splitTextToSize(desc, 90, 8.5, false) : [];
+      const descLines = desc ? doc.splitTextToSize(desc, 86, 8.5, false) : [];
       const rowH = 9 + descLines.length*4.2;
 
       if(idx % 2 === 1){
@@ -1315,9 +1346,9 @@ function generatePDF(){
       }
 
       doc.setFillColor(...blue);
-      doc.roundedRect(M+3, y+2.3, 6, 5, 1.3, true);
+      doc.circle(M+5.5, y+4.5, 3.8, true);
       doc.setTextColor(...bgWhite);
-      doc.text(String(idx+1), M+6, y+6, {fontSize:7.5, bold:true, align:'center'});
+      doc.text(String(idx+1), M+5.5, y+6.2, {fontSize:7, bold:true, align:'center'});
 
       doc.setTextColor(...textMain);
       doc.text(name, colDesc, y+6, {fontSize:9.5, bold:true});
@@ -1330,7 +1361,7 @@ function generatePDF(){
       doc.setTextColor(...textDim);
       doc.text(String(qty), colQty, y+6, {fontSize:9.5, align:'right'});
       doc.text(fmt(price), colPrice, y+6, {fontSize:9.5, align:'right'});
-      doc.setTextColor(...blueDeep);
+      doc.setTextColor(...blue);
       doc.text(fmt(lineTotal), colTotalX, y+6, {fontSize:9.5, bold:true, align:'right'});
 
       y += rowH;
@@ -1344,21 +1375,22 @@ function generatePDF(){
     y += 4;
     if(y > 245){ newPage(); y = 20; }
 
-    // ---- Total card (gradient pill) ----
-    const totalCardW = 78, totalCardX = W-M-totalCardW, totalCardH = 20;
-    doc.softShadow(totalCardX, y, totalCardW, totalCardH, 3);
-    doc.gradientRect(totalCardX, y, totalCardW, totalCardH, blue, green, 'horizontal');
+    // ---- Total pill (solid blue, fully rounded = pill shape) ----
+    const totalCardW = 78, totalCardX = W-M-totalCardW, totalCardH = 22;
+    doc.softShadow(totalCardX, y, totalCardW, totalCardH, 11);
+    doc.setFillColor(...blue);
+    doc.roundedRect(totalCardX, y, totalCardW, totalCardH, 11, true);
     doc.setTextColor(...bgWhite);
-    doc.text('TOTAL A PAYER', totalCardX+6, y+7.5, {fontSize:8, bold:true});
-    doc.text(fmt(subtotal), totalCardX+totalCardW-6, y+15.5, {fontSize:14, bold:true, align:'right'});
+    doc.text('TOTAL A PAYER', totalCardX+8, y+7.5, {fontSize:7.5, bold:true});
+    doc.text(fmt(subtotal), totalCardX+totalCardW-8, y+16.5, {fontSize:13, bold:true, align:'right'});
     y += totalCardH + 7;
 
-    // TVA badge (rounded green pill)
+    // TVA note — blue tinted pill (no more green)
     const tvaText = 'TVA non applicable - art. 293 B du CGI';
     const tvaW = textWidth(tvaText, 7.5, true)/2.834645669 + 8;
-    doc.setFillColor(...greenBg);
+    doc.setFillColor(230,238,255);
     doc.roundedRect(M, y-4.5, tvaW, 7, 3.5, true);
-    doc.setTextColor(...green);
+    doc.setTextColor(...blueDeep);
     doc.text(tvaText, M+4, y, {fontSize:7.5, bold:true});
     y += 10;
 
