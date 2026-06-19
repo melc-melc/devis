@@ -823,15 +823,38 @@ class SimplePDF {
     const topY = this.yFromTop(0);
     const baseY = this.yFromTop(hMm);
     const amp = this.mm(7);
-    this.setFillColor(12,12,15);
     const o = this.currentOps;
+
+    const pushWavePath = () => {
+      o.push(`0 ${topY.toFixed(2)} m`);
+      o.push(`${Wpt.toFixed(2)} ${topY.toFixed(2)} l`);
+      o.push(`${Wpt.toFixed(2)} ${baseY.toFixed(2)} l`);
+      o.push(`${(Wpt*0.70).toFixed(2)} ${(baseY+amp).toFixed(2)} ${(Wpt*0.45).toFixed(2)} ${(baseY-amp).toFixed(2)} ${(Wpt*0.25).toFixed(2)} ${(baseY+amp*0.3).toFixed(2)} c`);
+      o.push(`${(Wpt*0.10).toFixed(2)} ${(baseY-amp*0.5).toFixed(2)} 0 ${(baseY+amp*0.2).toFixed(2)} 0 ${baseY.toFixed(2)} c`);
+      o.push('h');
+    };
+
+    // Fill dark background
+    this.setFillColor(12,12,15);
+    o.push('q'); pushWavePath(); o.push('f Q');
+
+    // Grid clipped to the exact wave shape
+    const pageIdx = this.pages.length - 1;
+    const gsId = this.pageGStates[pageIdx].length;
+    this.pageGStates[pageIdx].push({alpha: 0.07});
     o.push('q');
-    o.push(`0 ${topY.toFixed(2)} m`);
-    o.push(`${Wpt.toFixed(2)} ${topY.toFixed(2)} l`);
-    o.push(`${Wpt.toFixed(2)} ${baseY.toFixed(2)} l`);
-    o.push(`${(Wpt*0.70).toFixed(2)} ${(baseY+amp).toFixed(2)} ${(Wpt*0.45).toFixed(2)} ${(baseY-amp).toFixed(2)} ${(Wpt*0.25).toFixed(2)} ${(baseY+amp*0.3).toFixed(2)} c`);
-    o.push(`${(Wpt*0.10).toFixed(2)} ${(baseY-amp*0.5).toFixed(2)} 0 ${(baseY+amp*0.2).toFixed(2)} 0 ${baseY.toFixed(2)} c`);
-    o.push('h f Q');
+    pushWavePath(); o.push('W n');
+    o.push(`/GS${gsId} gs`);
+    o.push(`${(255/255).toFixed(3)} ${(255/255).toFixed(3)} ${(255/255).toFixed(3)} RG`);
+    o.push(`${this.mm(0.15).toFixed(2)} w`);
+    const cell = this.mm(8);
+    for(let x = 0; x <= Wpt + cell; x += cell){
+      o.push(`${x.toFixed(2)} ${(baseY - this.mm(10)).toFixed(2)} m ${x.toFixed(2)} ${topY.toFixed(2)} l S`);
+    }
+    for(let yy = baseY; yy <= topY + cell; yy += cell){
+      o.push(`0 ${yy.toFixed(2)} m ${Wpt.toFixed(2)} ${yy.toFixed(2)} l S`);
+    }
+    o.push('Q');
   }
 
   build(){
@@ -864,7 +887,7 @@ class SimplePDF {
       const gsMap = [];
       this.pageGStates[i].forEach((g) => {
         const gNum = objNum++;
-        objects[gNum] = `<< /Type /ExtGState /ca ${g.alpha.toFixed(3)} >>`;
+        objects[gNum] = `<< /Type /ExtGState /ca ${g.alpha.toFixed(3)} /CA ${g.alpha.toFixed(3)} >>`;
         gsMap.push(gNum);
       });
       pageResourceGSNums.push(gsMap);
@@ -1218,25 +1241,25 @@ function generatePDF(){
     doc.circle(W-52, 5, 20, true);
     doc.restoreAlpha();
 
-    // melc. logo icon — blue rounded square (app icon style)
+    // melc. logo icon — blue rounded square (app icon style), bigger M
     doc.setFillColor(...blue);
-    doc.roundedRect(M, 8, 20, 20, 5.5, true);
+    doc.roundedRect(M, 8, 24, 24, 6, true);
     doc.setTextColor(255,255,255);
-    doc.text('m', M+6.5, 23.5, {fontSize:16, bold:true});
+    doc.text('M', M+12, 25.5, {fontSize:20, bold:true, align:'center'});
 
     // melc. wordmark
     doc.setTextColor(255,255,255);
-    doc.text(s.brand || 'melc.', M+24, 24, {fontSize:22, bold:true});
+    doc.text(s.brand || 'melc.', M+28, 25, {fontSize:24, bold:true});
 
     // Sender info in header (subtle, dimmed)
-    let yHs = 34;
+    let yHs = 38;
     const hLines = [];
     if(s.ownerName) hLines.push(s.ownerName);
     if(s.address) s.address.split('\n').forEach(l => { if(l.trim()) hLines.push(l); });
     if(s.phone) hLines.push('Tel : ' + s.phone);
     if(s.email) hLines.push(s.email);
     doc.setTextColor(140,142,150);
-    hLines.slice(0,3).forEach(line => { doc.text(line, M, yHs, {fontSize:8.5}); yHs += 4.8; });
+    hLines.slice(0,2).forEach(line => { doc.text(line, M, yHs, {fontSize:8.5}); yHs += 5; });
     if(s.siret){
       doc.setTextColor(100,102,110);
       doc.text('SIRET ' + s.siret, M, headerH-8, {fontSize:8});
