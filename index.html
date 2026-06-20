@@ -817,41 +817,54 @@ class SimplePDF {
     this.line(x1,y1,x2,y2);
   }
 
-  // Dark header with organic S-wave bottom edge (no gradient, purely dark)
+  // Dark header with REAL sinusoidal wave bottom + visible grid
   darkHeaderWithWave(W, hMm){
     const Wpt = this.mm(W);
     const topY = this.yFromTop(0);
     const baseY = this.yFromTop(hMm);
-    const amp = this.mm(7);
-    const o = this.currentOps;
+    const steps = 80;
 
-    const pushWavePath = () => {
+    // Pre-compute wave points (composite sine for richness)
+    const pts = [];
+    for(let i = 0; i <= steps; i++){
+      const t = i / steps;
+      const xp = t * Wpt;
+      const yp = baseY
+        + this.mm(4) * Math.sin(t * Math.PI * 6)
+        + this.mm(1.8) * Math.sin(t * Math.PI * 12 + 1);
+      pts.push([xp, yp]);
+    }
+
+    const pushWave = () => {
+      const o = this.currentOps;
       o.push(`0 ${topY.toFixed(2)} m`);
       o.push(`${Wpt.toFixed(2)} ${topY.toFixed(2)} l`);
-      o.push(`${Wpt.toFixed(2)} ${baseY.toFixed(2)} l`);
-      o.push(`${(Wpt*0.70).toFixed(2)} ${(baseY+amp).toFixed(2)} ${(Wpt*0.45).toFixed(2)} ${(baseY-amp).toFixed(2)} ${(Wpt*0.25).toFixed(2)} ${(baseY+amp*0.3).toFixed(2)} c`);
-      o.push(`${(Wpt*0.10).toFixed(2)} ${(baseY-amp*0.5).toFixed(2)} 0 ${(baseY+amp*0.2).toFixed(2)} 0 ${baseY.toFixed(2)} c`);
+      o.push(`${pts[steps][0].toFixed(2)} ${pts[steps][1].toFixed(2)} l`);
+      for(let i = steps - 1; i >= 0; i--){
+        o.push(`${pts[i][0].toFixed(2)} ${pts[i][1].toFixed(2)} l`);
+      }
       o.push('h');
     };
 
     // Fill dark background
-    this.setFillColor(12,12,15);
-    o.push('q'); pushWavePath(); o.push('f Q');
+    this.setFillColor(10,10,14);
+    const o = this.currentOps;
+    o.push('q'); pushWave(); o.push('f Q');
 
-    // Grid clipped to the exact wave shape
+    // Grid clipped inside wave — clearly visible
     const pageIdx = this.pages.length - 1;
     const gsId = this.pageGStates[pageIdx].length;
-    this.pageGStates[pageIdx].push({alpha: 0.07});
-    o.push('q');
-    pushWavePath(); o.push('W n');
+    this.pageGStates[pageIdx].push({alpha: 0.11});
+    o.push('q'); pushWave(); o.push('W n');
     o.push(`/GS${gsId} gs`);
-    o.push(`${(255/255).toFixed(3)} ${(255/255).toFixed(3)} ${(255/255).toFixed(3)} RG`);
-    o.push(`${this.mm(0.15).toFixed(2)} w`);
-    const cell = this.mm(8);
+    o.push(`1.000 1.000 1.000 RG`);
+    o.push(`${this.mm(0.22).toFixed(2)} w`);
+    const cell = this.mm(7);
+    const Hbound = topY + this.mm(5);
     for(let x = 0; x <= Wpt + cell; x += cell){
-      o.push(`${x.toFixed(2)} ${(baseY - this.mm(10)).toFixed(2)} m ${x.toFixed(2)} ${topY.toFixed(2)} l S`);
+      o.push(`${x.toFixed(2)} ${(baseY - this.mm(12)).toFixed(2)} m ${x.toFixed(2)} ${Hbound.toFixed(2)} l S`);
     }
-    for(let yy = baseY; yy <= topY + cell; yy += cell){
+    for(let yy = baseY - this.mm(5); yy <= Hbound; yy += cell){
       o.push(`0 ${yy.toFixed(2)} m ${Wpt.toFixed(2)} ${yy.toFixed(2)} l S`);
     }
     o.push('Q');
@@ -1208,7 +1221,7 @@ function generatePDF(){
     const bgWhite = [255,255,255];
     const surfaceLight = [243,245,248];
     const surfaceAlt = [248,249,251];
-    const dark = [12,12,15];
+    const dark = [10,10,14];
     const blue = [0,102,255];
     const blueDeep = [0,64,196];
     const blueLight = [51,133,255];
@@ -1241,28 +1254,24 @@ function generatePDF(){
     doc.circle(W-52, 5, 20, true);
     doc.restoreAlpha();
 
-    // melc. logo icon — blue rounded square (app icon style), bigger M
+    // melc. wordmark — grand, sans logo, avec un trait bleu dessous
+    doc.setTextColor(255,255,255);
+    doc.text(s.brand || 'melc.', M, 24, {fontSize:28, bold:true});
+    // Trait bleu accent sous le wordmark
     doc.setFillColor(...blue);
-    doc.roundedRect(M, 8, 24, 24, 6, true);
-    doc.setTextColor(255,255,255);
-    doc.text('M', M+12, 25.5, {fontSize:20, bold:true, align:'center'});
+    doc.rect(M, 26.5, 30, 0.9, true);
 
-    // melc. wordmark
-    doc.setTextColor(255,255,255);
-    doc.text(s.brand || 'melc.', M+28, 25, {fontSize:24, bold:true});
-
-    // Sender info in header (subtle, dimmed)
-    let yHs = 38;
-    const hLines = [];
-    if(s.ownerName) hLines.push(s.ownerName);
-    if(s.address) s.address.split('\n').forEach(l => { if(l.trim()) hLines.push(l); });
-    if(s.phone) hLines.push('Tel : ' + s.phone);
-    if(s.email) hLines.push(s.email);
-    doc.setTextColor(140,142,150);
-    hLines.slice(0,2).forEach(line => { doc.text(line, M, yHs, {fontSize:8.5}); yHs += 5; });
-    if(s.siret){
-      doc.setTextColor(100,102,110);
-      doc.text('SIRET ' + s.siret, M, headerH-8, {fontSize:8});
+    // Sender info compact sur une ligne
+    const senderParts = [];
+    if(s.ownerName) senderParts.push(s.ownerName);
+    if(s.address) senderParts.push(s.address.split('\n')[0]);
+    if(s.phone) senderParts.push(s.phone);
+    doc.setTextColor(145,147,155);
+    doc.text(senderParts.join('  -  '), M, 35, {fontSize:8.5});
+    if(s.email || s.siret){
+      const line2 = [s.email, s.siret ? 'SIRET ' + s.siret : ''].filter(Boolean).join('  |  ');
+      doc.setTextColor(105,107,115);
+      doc.text(line2, M, 41, {fontSize:8});
     }
 
     // "DEVIS" pill badge — top right, blue
@@ -1369,9 +1378,9 @@ function generatePDF(){
       }
 
       doc.setFillColor(...blue);
-      doc.circle(M+5.5, y+4.5, 3.8, true);
+      doc.circle(M+5.5, y+5, 4.2, true);
       doc.setTextColor(...bgWhite);
-      doc.text(String(idx+1), M+5.5, y+6.2, {fontSize:7, bold:true, align:'center'});
+      doc.text(String(idx+1), M+5.5, y+7, {fontSize:8.5, bold:true, align:'center'});
 
       doc.setTextColor(...textMain);
       doc.text(name, colDesc, y+6, {fontSize:9.5, bold:true});
@@ -1398,14 +1407,19 @@ function generatePDF(){
     y += 4;
     if(y > 245){ newPage(); y = 20; }
 
-    // ---- Total pill (solid blue, fully rounded = pill shape) ----
-    const totalCardW = 78, totalCardX = W-M-totalCardW, totalCardH = 22;
-    doc.softShadow(totalCardX, y, totalCardW, totalCardH, 11);
+    // ---- Total — dark card with blue accent bar, clean and modern ----
+    const totalCardW = 80, totalCardX = W-M-totalCardW, totalCardH = 24;
+    doc.softShadow(totalCardX, y, totalCardW, totalCardH, 3);
+    doc.setFillColor(...dark);
+    doc.roundedRect(totalCardX, y, totalCardW, totalCardH, 3, true);
+    // Blue accent bar on left edge
     doc.setFillColor(...blue);
-    doc.roundedRect(totalCardX, y, totalCardW, totalCardH, 11, true);
-    doc.setTextColor(...bgWhite);
-    doc.text('TOTAL A PAYER', totalCardX+8, y+7.5, {fontSize:7.5, bold:true});
-    doc.text(fmt(subtotal), totalCardX+totalCardW-8, y+16.5, {fontSize:13, bold:true, align:'right'});
+    doc.roundedRect(totalCardX, y, 2.5, totalCardH, 1.5, true);
+    // Labels and amount — shifted right to not overlap bar
+    doc.setTextColor(140,142,150);
+    doc.text('TOTAL A PAYER', totalCardX+6, y+8, {fontSize:7.5, bold:true});
+    doc.setTextColor(255,255,255);
+    doc.text(fmt(subtotal), totalCardX+totalCardW-5, y+19, {fontSize:15, bold:true, align:'right'});
     y += totalCardH + 7;
 
     // TVA note — blue tinted pill (no more green)
