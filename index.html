@@ -1304,7 +1304,8 @@ function generatePDF(){
     doc.text(devisDate, cardX+5, cardY+30, {fontSize:8.5, bold:true});
     doc.text(`${validity} j`, cardX+36, cardY+30, {fontSize:8.5, bold:true});
 
-    y = headerH + 12;
+    // La carte descend jusqu'à cardY + cardH = headerH + 16mm, on part de là + marge
+    y = cardY + cardH + 8;
 
     // ---- Two-column: Emis par / Adresse a ----
     const colW = (W - 2*M - 8) / 2;
