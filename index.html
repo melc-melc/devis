@@ -824,14 +824,14 @@ class SimplePDF {
     const baseY = this.yFromTop(hMm);
     const steps = 80;
 
-    // Pre-compute wave points (composite sine for richness)
+    // Pre-compute wave points — doux et feutré, pas trop agressif
     const pts = [];
     for(let i = 0; i <= steps; i++){
       const t = i / steps;
       const xp = t * Wpt;
       const yp = baseY
-        + this.mm(4) * Math.sin(t * Math.PI * 6)
-        + this.mm(1.8) * Math.sin(t * Math.PI * 12 + 1);
+        + this.mm(2.2) * Math.sin(t * Math.PI * 4)
+        + this.mm(0.8) * Math.sin(t * Math.PI * 8 + 0.8);
       pts.push([xp, yp]);
     }
 
@@ -1377,10 +1377,12 @@ function generatePDF(){
         doc.rect(M, y, W-2*M, rowH, true);
       }
 
+      // Cercle badge — centré sur (M+5.5, y+5)
       doc.setFillColor(...blue);
       doc.circle(M+5.5, y+5, 4.2, true);
       doc.setTextColor(...bgWhite);
-      doc.text(String(idx+1), M+5.5, y+7, {fontSize:8.5, bold:true, align:'center'});
+      // Centre optique : baseline = centre_y + rayon*0.35 (compense ascendante Helvetica)
+      doc.text(String(idx+1), M+5.5, y+6.5, {fontSize:8.5, bold:true, align:'center'});
 
       doc.setTextColor(...textMain);
       doc.text(name, colDesc, y+6, {fontSize:9.5, bold:true});
@@ -1407,15 +1409,52 @@ function generatePDF(){
     y += 4;
     if(y > 245){ newPage(); y = 20; }
 
-    // ---- Total — dark card with blue accent bar, clean and modern ----
+    // ---- Total — dark card avec quadrillage intégré ----
     const totalCardW = 80, totalCardX = W-M-totalCardW, totalCardH = 24;
     doc.softShadow(totalCardX, y, totalCardW, totalCardH, 3);
+
+    // Draw dark card shape then grid clipped inside it
+    const tcX0=doc.mm(totalCardX), tcY0=doc.yFromTop(y)-doc.mm(totalCardH), tcX1=tcX0+doc.mm(totalCardW), tcY1=tcY0+doc.mm(totalCardH);
+    const tcR=doc.mm(3), kk=0.5523;
+    const cardPath = () => {
+      const o = doc.currentOps;
+      o.push(`${(tcX0+tcR).toFixed(2)} ${tcY1.toFixed(2)} m`);
+      o.push(`${(tcX1-tcR).toFixed(2)} ${tcY1.toFixed(2)} l`);
+      o.push(`${(tcX1-tcR+kk*tcR).toFixed(2)} ${tcY1.toFixed(2)} ${tcX1.toFixed(2)} ${(tcY1-tcR+kk*tcR).toFixed(2)} ${tcX1.toFixed(2)} ${(tcY1-tcR).toFixed(2)} c`);
+      o.push(`${tcX1.toFixed(2)} ${(tcY0+tcR).toFixed(2)} l`);
+      o.push(`${tcX1.toFixed(2)} ${(tcY0+tcR-kk*tcR).toFixed(2)} ${(tcX1-tcR+kk*tcR).toFixed(2)} ${tcY0.toFixed(2)} ${(tcX1-tcR).toFixed(2)} ${tcY0.toFixed(2)} c`);
+      o.push(`${(tcX0+tcR).toFixed(2)} ${tcY0.toFixed(2)} l`);
+      o.push(`${(tcX0+tcR-kk*tcR).toFixed(2)} ${tcY0.toFixed(2)} ${tcX0.toFixed(2)} ${(tcY0+tcR-kk*tcR).toFixed(2)} ${tcX0.toFixed(2)} ${(tcY0+tcR).toFixed(2)} c`);
+      o.push(`${tcX0.toFixed(2)} ${(tcY1-tcR).toFixed(2)} l`);
+      o.push(`${tcX0.toFixed(2)} ${(tcY1-tcR+kk*tcR).toFixed(2)} ${(tcX0+tcR-kk*tcR).toFixed(2)} ${tcY1.toFixed(2)} ${(tcX0+tcR).toFixed(2)} ${tcY1.toFixed(2)} c`);
+      o.push('h');
+    };
+
+    // Fill dark background
     doc.setFillColor(...dark);
-    doc.roundedRect(totalCardX, y, totalCardW, totalCardH, 3, true);
+    doc.currentOps.push('q'); cardPath(); doc.currentOps.push('f Q');
+
+    // Grid clipped inside card
+    const pageIdx2 = doc.pages.length - 1;
+    const gsId2 = doc.pageGStates[pageIdx2].length;
+    doc.pageGStates[pageIdx2].push({alpha: 0.10});
+    doc.currentOps.push('q'); cardPath(); doc.currentOps.push('W n');
+    doc.currentOps.push(`/GS${gsId2} gs`);
+    doc.currentOps.push(`1.000 1.000 1.000 RG`);
+    doc.currentOps.push(`${doc.mm(0.22).toFixed(2)} w`);
+    const tcell = doc.mm(7);
+    for(let x = tcX0; x <= tcX1 + tcell; x += tcell){
+      doc.currentOps.push(`${x.toFixed(2)} ${tcY0.toFixed(2)} m ${x.toFixed(2)} ${tcY1.toFixed(2)} l S`);
+    }
+    for(let yy = tcY0; yy <= tcY1 + tcell; yy += tcell){
+      doc.currentOps.push(`0 ${yy.toFixed(2)} m ${tcX1.toFixed(2)} ${yy.toFixed(2)} l S`);
+    }
+    doc.currentOps.push('Q');
+
     // Blue accent bar on left edge
     doc.setFillColor(...blue);
     doc.roundedRect(totalCardX, y, 2.5, totalCardH, 1.5, true);
-    // Labels and amount — shifted right to not overlap bar
+    // Labels and amount
     doc.setTextColor(140,142,150);
     doc.text('TOTAL A PAYER', totalCardX+6, y+8, {fontSize:7.5, bold:true});
     doc.setTextColor(255,255,255);
